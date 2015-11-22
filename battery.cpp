@@ -4,7 +4,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <array>
-
+#include <memory>
 #include <getopt.h>
 #include <stdlib.h>
 
@@ -112,10 +112,12 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
   ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
 }
 
+typedef std::array<std::string,5> ArrayT;
+
 struct Parameters 
 {
-  int type = 0;
   std::string path = "/sys/class/power_supply/BAT0";
+  ArrayT icons = ArrayT{ "", "", "", "", "" };
 };
 
 bool parseArgs( const int argc, char* const* argv, Parameters& params )
@@ -123,6 +125,7 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
   struct option long_options[] =
     {
       {"type",  required_argument, 0, 't'},
+      {"custom",  required_argument, 0, 'c'},
       {"help",  no_argument, 0, 'h'},
       {0, 0, 0, 0}
     };
@@ -130,7 +133,7 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
   int option_index = 0;
   int c;
   while( true ) {
-    c = getopt_long (argc, argv, "t:h", long_options, &option_index);
+    c = getopt_long (argc, argv, "t:c:h", long_options, &option_index);
     
     /* Detect the end of the options. */
     if (c == -1)
@@ -141,18 +144,39 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
       {
         std::string arg(optarg);
         if( arg == "heart") {
-          params.type=1;
-        } else {
-          params.type=0;
+          params.icons = 
+            {"", "", "", "", ""};
+        } 
+      }
+      break;
+    case 'c':
+      {
+        const std::string arg = optarg;
+        const size_t delim = arg.find(',');
+
+        if( delim == std::string::npos ) {
+          std::cerr<<"[ERROR] Need to delimit FULL and EMPTY with a ','"<<std::endl;
+          return false;
         }
+        const std::string full = arg.substr(0,delim);
+        const std::string empty = arg.substr(delim+1);
+        params.icons = 
+          { full  + full  + full  + full,
+            full  + full  + full  + empty,
+            full  + full  + empty + empty,
+            full  + empty + empty + empty,
+            empty + empty + empty + empty };
       }
       break;
     case 'h':
       std::cout<<"Usage: "<<argv[0]<<" [OPTIONS]...\n"
                <<R"(Options:
-  -t, --type [heart/battery]  Specify what icons to use to indicate 
-                              the battery status.
-  -h, --help                  Print this message and then exit.
+  -t, --type [TYPE]         Specify what icons to use to indicate 
+                            the battery status. Select between battery or
+                            heart.
+  -c, --custom [FULL,EMPTY] Use custom battery indicator, using a combination 
+                            of characters FULL and EMPTY.
+  -h, --help                Print this message and then exit.
 Author:
   Fredrik "PlaTFooT" Salomonsson
 )";
@@ -190,7 +214,6 @@ int main( int argc, char** argv )
 
   std::stringstream ss;
 
-
   auto gen_battery_icon = [&ss,percentage](const std::array<std::string,5>& icons ){
     if( percentage >= 95.0 ) {
       ss<<icons[0];
@@ -204,19 +227,16 @@ int main( int argc, char** argv )
       ss<<icons[4];
     }
   };
+  
   std::string block_button;
   {
     char* block_buffer = getenv("BLOCK_BUTTON");
     block_button = block_buffer != NULL ? block_buffer : "";
   }
+  
   if( block_button.empty() ) {
     ss<<data.status<<" ";
-    if( params.type == 1 ) {
-      gen_battery_icon( std::array<std::string,5>{ "", "", "",
-            "", "" } );
-    } else {
-      gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
-    }
+    gen_battery_icon( params.icons );
     ss<<"  ";
   } else {
     ss<<static_cast<size_t>(percentage)<<"% ";
