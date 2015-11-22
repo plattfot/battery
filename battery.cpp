@@ -6,6 +6,7 @@
 #include <array>
 
 #include <getopt.h>
+#include <stdlib.h>
 
 #define ST_CHARGING ""
 #define ST_DISCHARGING " "
@@ -155,6 +156,7 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
 Author:
   Fredrik "PlaTFooT" Salomonsson
 )";
+      return false;
       break;
     }
   }
@@ -166,7 +168,7 @@ int main( int argc, char** argv )
   const double threshold = 10.0;
   Parameters params;
 
-  if( parseArgs(argc,argv,params) )
+  if( !parseArgs(argc,argv,params) )
     return 0;
     
   BatteryData data;
@@ -187,7 +189,7 @@ int main( int argc, char** argv )
     static_cast<double>(data.full_design)*100.0;
 
   std::stringstream ss;
-  ss<<data.status<<" ";
+
 
   auto gen_battery_icon = [&ss,percentage](const std::array<std::string,5>& icons ){
     if( percentage >= 95.0 ) {
@@ -202,14 +204,23 @@ int main( int argc, char** argv )
       ss<<icons[4];
     }
   };
-
-  if( params.type == 1 ) {
-    gen_battery_icon( std::array<std::string,5>{ "", "", "",
-                                                 "", "" } );
-  } else {
-    gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
+  std::string block_button;
+  {
+    char* block_buffer = getenv("BLOCK_BUTTON");
+    block_button = block_buffer != NULL ? block_buffer : "";
   }
-  ss<<"  ";
+  if( block_button.empty() ) {
+    ss<<data.status<<" ";
+    if( params.type == 1 ) {
+      gen_battery_icon( std::array<std::string,5>{ "", "", "",
+            "", "" } );
+    } else {
+      gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
+    }
+    ss<<"  ";
+  } else {
+    ss<<static_cast<size_t>(percentage)<<"% ";
+  }
 
   // Compute time of discharge/charge
   if( data.present_rate > 0 ){
