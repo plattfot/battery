@@ -3,7 +3,7 @@
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
-
+#include <array>
 // enum Status : unsigned {
 //   // Connected to power and is not charging
 //   ST_POWER = 0,
@@ -79,33 +79,61 @@ void parseBattery( const std::string& path, BatteryData& data )
     }
 }
 
+void convertToMilliWattHour( BatteryData& data )
+{
+  // From print_battery_info.c in i3status
+  data.present_rate = ((static_cast<double>(data.voltage) / 1000.0) *
+                       (static_cast<double>(data.present_rate) / 1000.0));
+
+  if( data.voltage != -1) {
+
+    data.remaining = ((static_cast<double>(data.voltage) / 1000.0) *
+                      (static_cast<double>(data.remaining) / 1000.0));
+
+    data.full_design = ((static_cast<double>(data.voltage) / 1000.0) *
+                        (static_cast<double>(data.full_design) / 1000.0));
+  }
+}
+
+
+void computeTime( const BatteryData& data, std::stringstream& ss )
+{
+  double remaining_time;
+
+  if( data.status == ST_CHARGING) {
+    remaining_time = static_cast<double>(data.full_design) -
+      static_cast<double>(data.remaining)/ static_cast<double>(data.present_rate);
+  } else if ( data.status == ST_DISCHARGING ) {
+    remaining_time = static_cast<double>(data.remaining) /
+      static_cast<double>(data.present_rate);
+  } else {
+    remaining_time = 0.0;
+  }
+    
+  const int seconds_remaining = static_cast<int>( remaining_time * 3600.0 );
+  const int hours = seconds_remaining / 3600;
+  const int seconds = seconds_remaining - (hours * 3600);
+  const int minutes = seconds / 60;
+
+  ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
+}
+
 int main(int argc, const char** argv )
 {
   std::string path = "/sys/class/power_supply/BAT0";
+  const double threshold = 10.0;
   
   BatteryData data;
   parseBattery( path+"/uevent", data );
-  // From print_battery_info.c in i3status
-  /* the difference between POWER_SUPPLY_ENERGY_NOW and
+  
+  /* The difference between POWER_SUPPLY_ENERGY_NOW and
    * POWER_SUPPLY_CHARGE_NOW is the unit of measurement. The energy is
    * given in mWh, the charge in mAh. So calculate every value given in
    * ampere to watt */
-  if( !data.watt_as_unit ){
-    data.present_rate = ((static_cast<double>(data.voltage) / 1000.0) *
-                         (static_cast<double>(data.present_rate) / 1000.0));
-
-    if( data.voltage != -1) {
-
-      data.remaining = ((static_cast<double>(data.voltage) / 1000.0) *
-                        (static_cast<double>(data.remaining) / 1000.0));
-
-      data.full_design = ((static_cast<double>(data.voltage) / 1000.0) *
-                          (static_cast<double>(data.full_design) / 1000.0));
-    }
-  }
-  
+  if( !data.watt_as_unit )
+    convertToMilliWattHour(data);
   if( (data.full_design == -1) || (data.remaining == -1 ) ){
-    std::cout<<"   "<<std::endl;
+    std::cout<<"  "<<std::endl;
     return 33;
   }
   
@@ -115,43 +143,34 @@ int main(int argc, const char** argv )
   std::stringstream ss;
   ss<<data.status<<" ";
 
-  if( percentage >= 95.0 ) {
-    ss<<"";
-  } else if( percentage >= 75.0 ) {
-    ss<<"";
-  } else if( percentage >= 50.0 ) {
-    ss<<"";
-  } else if( percentage >= 25.0 ) {
-    ss<<"";
-  } else {
-    ss<<"";
-  }
+  auto gen_battery_icon = [&ss,percentage](const std::array<std::string,5>& icons ){
+    if( percentage >= 95.0 ) {
+      ss<<icons[0];
+    } else if( percentage >= 75.0 ) {
+      ss<<icons[1];
+    } else if( percentage >= 50.0 ) {
+      ss<<icons[2];
+    } else if( percentage >= 25.0 ) {
+      ss<<icons[3];
+    } else {
+      ss<<icons[4];
+    }
+  };
+
+  //gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
+  gen_battery_icon( std::array<std::string,5>{"", "", "" "" , ""});
   ss<<"  ";
+
   // Compute time of discharge/charge
   if( data.present_rate > 0 ){
-    double remaining_time;
-
-    if( data.status == ST_CHARGING) {
-      remaining_time = static_cast<double>(data.full_design) -
-        static_cast<double>(data.remaining)/ static_cast<double>(data.present_rate);
-    } else if ( data.status == ST_DISCHARGING ) {
-      remaining_time = static_cast<double>(data.remaining) /
-        static_cast<double>(data.present_rate);
-    } else {
-      remaining_time = 0.0;
-    }
-    
-    const int seconds_remaining = static_cast<int>( remaining_time * 3600.0 );
-    const int hours = seconds_remaining / 3600;
-    const int seconds = seconds_remaining - (hours * 3600);
-    const int minutes = seconds / 60;
-
-    ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
+    computeTime( data, ss );
   }
+
+  // Output the format i3blocks want
   std::cout<<ss.str()<<std::endl;
   std::cout<<ss.str()<<std::endl;
 
-  if( percentage <= 10.0 )
+  if( percentage <= threshold )
     std::cout<<"#FF0000"<<std::endl;
   
   return 0;
