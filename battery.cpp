@@ -26,7 +26,7 @@ typedef std::array<std::string,5> ArrayT;
 
 struct Parameters 
 {
-  std::string path = "/sys/class/power_supply";
+  std::string path = "/sys/class/power_supply/BAT0";
   ArrayT icons = ArrayT{ "", "", "", "", "" };
 };
 
@@ -199,12 +199,13 @@ int main( int argc, char** argv )
    * in ampere to watt */
   if( !data.watt_as_unit )
     convertToMilliWattHour(data);
+  
   if( (data.full_design < 0.0) || (data.remaining < 0.0 ) ){
     std::cout<<"  "<<std::endl;
     return 1;
   }
   
-  const double percentage = data.remaining/ data.full_design * 100.0;
+  const double percentage = data.remaining / data.full_design * 100.0;
 
   std::stringstream ss;
   auto gen_battery_icon = [&ss,percentage](const std::array<std::string,5>& icons ){
@@ -227,8 +228,9 @@ int main( int argc, char** argv )
     block_button = block_buffer != NULL ? block_buffer : "";
   }
   
+  ss<<data.status;
   if( block_button.empty() ) {
-    ss<<data.status<<" ";
+    ss<<" ";
     gen_battery_icon( params.icons );
     ss<<"  ";
   } else {
