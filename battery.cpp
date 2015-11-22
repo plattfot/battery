@@ -4,15 +4,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <array>
-// enum Status : unsigned {
-//   // Connected to power and is not charging
-//   ST_POWER = 0,
-//   // Running on battery
-//   ST_DISCHARGING = 1,
-//   // Battery is charging
-//   ST_CHARGING = 2
-// }
-  ;
+
+#include <getopt.h>
 
 #define ST_CHARGING ""
 #define ST_DISCHARGING " "
@@ -118,13 +111,53 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
   ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
 }
 
-int main(int argc, const char** argv )
+struct Parameters 
 {
+  int type = 0;
   std::string path = "/sys/class/power_supply/BAT0";
+};
+
+void parseArgs( const int argc, char* const* argv, Parameters& params )
+{
+  struct option long_options[] =
+    {
+      {"type",  required_argument, 0, 't'},
+      {0, 0, 0, 0}
+    };
+
+  int option_index = 0;
+  int c;
+  while( true ) {
+    c = getopt_long (argc, argv, "t:", long_options, &option_index);
+    
+    /* Detect the end of the options. */
+    if (c == -1)
+      break;
+      
+    switch(c) {
+      case 't':
+        std::string arg(optarg);
+        if( arg == "heart") {
+          std::cout<<"heart"<<std::endl;
+          params.type=1;
+        } else {
+          std::cout<<"battery"<<std::endl;
+          params.type=0;
+        }
+        break;
+    }
+  }
+}
+
+int main( int argc, char** argv )
+{
   const double threshold = 10.0;
-  
+  Parameters params;
+
+  parseArgs(argc,argv,params);
+    
   BatteryData data;
-  parseBattery( path+"/uevent", data );
+  parseBattery( params.path+"/uevent", data );
   
   /* The difference between POWER_SUPPLY_ENERGY_NOW and
    * POWER_SUPPLY_CHARGE_NOW is the unit of measurement. The energy is
@@ -134,7 +167,7 @@ int main(int argc, const char** argv )
     convertToMilliWattHour(data);
   if( (data.full_design == -1) || (data.remaining == -1 ) ){
     std::cout<<"  "<<std::endl;
-    return 33;
+    return 1;
   }
   
   const double percentage = static_cast<double>(data.remaining)/
@@ -157,8 +190,12 @@ int main(int argc, const char** argv )
     }
   };
 
-  //gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
-  gen_battery_icon( std::array<std::string,5>{"", "", "" "" , ""});
+  if( params.type == 1 ) {
+    gen_battery_icon( std::array<std::string,5>{ "", "", "",
+                                                 "", "" } );
+  } else {
+    gen_battery_icon( std::array<std::string,5>{ "", "", "", "", ""} );
+  }
   ss<<"  ";
 
   // Compute time of discharge/charge
