@@ -12,3 +12,7 @@ $(EXEC): $(EXEC).cpp
 .PHONY: install
 install:
 	cp $(EXEC) ~/.i3/custom/
+
+PHONY: clean
+clean:
+	rm -f -- $(EXEC)
