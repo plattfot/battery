@@ -95,8 +95,9 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
   double remaining_time;
 
   if( data.status == ST_CHARGING) {
-    remaining_time = static_cast<double>(data.full_design) -
-      static_cast<double>(data.remaining)/ static_cast<double>(data.present_rate);
+    remaining_time = (static_cast<double>(data.full_design) -
+                      static_cast<double>(data.remaining)) /
+      static_cast<double>(data.present_rate);
   } else if ( data.status == ST_DISCHARGING ) {
     remaining_time = static_cast<double>(data.remaining) /
       static_cast<double>(data.present_rate);
