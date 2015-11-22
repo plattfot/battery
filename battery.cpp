@@ -282,7 +282,11 @@ int main( int argc, char** argv )
   if( !parseArgs(argc,argv,params) )
     return 0;
 
-  const size_t num_batts = countBatteries( params.path );
+  const long int num_batts = countBatteries( params.path );
+
+  // Make sure battery index is within bounds
+  params.battery = std::min( params.battery, num_batts - 1 );
+
   std::vector<BatteryData> batteries(num_batts);
   
   for( size_t i = 0; i < num_batts; ++i ) {
