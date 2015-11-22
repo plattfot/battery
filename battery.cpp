@@ -1,16 +1,22 @@
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
 
-enum Status : unsigned {
-  // Connected to power and is not charging
-  ST_POWER = 0,
-  // Running on battery
-  ST_DISCHARGING = 1,
-  // Battery is charging
-  ST_CHARGING = 2
-};
+// enum Status : unsigned {
+//   // Connected to power and is not charging
+//   ST_POWER = 0,
+//   // Running on battery
+//   ST_DISCHARGING = 1,
+//   // Battery is charging
+//   ST_CHARGING = 2
+// }
+  ;
+
+#define ST_CHARGING ""
+#define ST_DISCHARGING " "
+#define ST_PLUG ""
 
 struct BatteryData {
   std::string status = " ";
@@ -58,12 +64,13 @@ void parseBattery( const std::string& path, BatteryData& data )
             data.present_rate = abs( to_int(delim) );
           else if (begins_with("POWER_SUPPLY_STATUS", delim )) {
             const std::string& status = line.substr(delim+1);
-            if( status == "Charging")
-              data.status = "";
-            else if( status == "Discharging" )
-              data.status = " ";
-            else
-              data.status = "";
+            if( status == "Charging" ) {
+              data.status = ST_CHARGING;
+            } else if( status == "Discharging" ) {
+              data.status = ST_DISCHARGING;
+            } else {
+              data.status = ST_PLUG;
+            }
           } else if (begins_with("POWER_SUPPLY_ENERGY_FULL_DESIGN", delim)){
             data.full_design = to_int( delim );
           }
@@ -106,20 +113,41 @@ int main(int argc, const char** argv )
     static_cast<double>(data.full_design)*100.0;
 
   std::stringstream ss;
-  ss<<data.status;
+  ss<<data.status<<" ";
 
   if( percentage >= 95.0 ) {
-    ss<<"  ";
+    ss<<"";
   } else if( percentage >= 75.0 ) {
-    ss<<"  ";
+    ss<<"";
   } else if( percentage >= 50.0 ) {
-    ss<<"  ";
+    ss<<"";
   } else if( percentage >= 25.0 ) {
-    ss<<"  ";
+    ss<<"";
   } else {
-    ss<<"  ";
+    ss<<"";
   }
+  ss<<"  ";
+  // Compute time of discharge/charge
+  if( data.present_rate > 0 ){
+    double remaining_time;
 
+    if( data.status == ST_CHARGING) {
+      remaining_time = static_cast<double>(data.full_design) -
+        static_cast<double>(data.remaining)/ static_cast<double>(data.present_rate);
+    } else if ( data.status == ST_DISCHARGING ) {
+      remaining_time = static_cast<double>(data.remaining) /
+        static_cast<double>(data.present_rate);
+    } else {
+      remaining_time = 0.0;
+    }
+    
+    const int seconds_remaining = static_cast<int>( remaining_time * 3600.0 );
+    const int hours = seconds_remaining / 3600;
+    const int seconds = seconds_remaining - (hours * 3600);
+    const int minutes = seconds / 60;
+
+    ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
+  }
   std::cout<<ss.str()<<std::endl;
   std::cout<<ss.str()<<std::endl;
 
