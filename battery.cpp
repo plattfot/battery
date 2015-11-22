@@ -3,6 +3,7 @@
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
+#include <cmath> // fabs
 #include <array>
 #include <memory>
 #include <getopt.h>
@@ -14,11 +15,19 @@
 
 struct BatteryData {
   std::string status = " ";
-  int full_design = -1;
-  int remaining = -1;
-  int present_rate= -1;
-  int voltage = -1;
+  double full_design = -1.0;
+  double remaining = -1.0;
+  double present_rate= -1.0;
+  double voltage = -1.0;
   bool watt_as_unit = false;
+};
+
+typedef std::array<std::string,5> ArrayT;
+
+struct Parameters 
+{
+  std::string path = "/sys/class/power_supply";
+  ArrayT icons = ArrayT{ "", "", "", "", "" };
 };
 
 void parseBattery( const std::string& path, BatteryData& data )
@@ -27,8 +36,8 @@ void parseBattery( const std::string& path, BatteryData& data )
   if( file.is_open() )
     {
       std::string line;
-      auto to_int = [&line](const size_t delim){
-        return atoi( line.substr(delim+1).c_str() );
+      auto to_double = [&line](const size_t delim){
+        return static_cast<double>( atoi( line.substr(delim+1).c_str() ) );
       };
 
       auto begins_with = [&line]( const char* txt, const size_t end ){
@@ -41,21 +50,21 @@ void parseBattery( const std::string& path, BatteryData& data )
           const size_t delim = line.find('=');
           if( begins_with("POWER_SUPPLY_ENERGY_NOW",delim) ) {
             data.watt_as_unit = true;
-            data.remaining = to_int(delim);
+            data.remaining = to_double(delim);
           } else if( begins_with("POWER_SUPPLY_CHARGE_NOW", delim) ){
             data.watt_as_unit = false;
-            data.remaining = to_int( delim );
+            data.remaining = to_double( delim );
           } else if( begins_with( "POWER_SUPPLY_CURRENT_NOW", delim) )
-            data.present_rate = std::abs( to_int( delim ) );
+            data.present_rate = std::fabs( to_double( delim ) );
           else if( begins_with( "POWER_SUPPLY_VOLTAGE_NOW", delim) )
-            data.voltage = std::abs( to_int( delim ) );
+            data.voltage = std::fabs( to_double( delim ) );
         
           /* on some systems POWER_SUPPLY_POWER_NOW does not exist, but actually
            * it is the same as POWER_SUPPLY_CURRENT_NOW but with μWh as
            * unit instead of μAh. We will calculate it as we need it
            * later. */
           else if (begins_with("POWER_SUPPLY_POWER_NOW", delim ))
-            data.present_rate = abs( to_int(delim) );
+            data.present_rate = abs( to_double(delim) );
           else if (begins_with("POWER_SUPPLY_STATUS", delim )) {
             const std::string& status = line.substr(delim+1);
             if( status == "Charging" ) {
@@ -66,7 +75,7 @@ void parseBattery( const std::string& path, BatteryData& data )
               data.status = ST_PLUG;
             }
           } else if (begins_with("POWER_SUPPLY_ENERGY_FULL_DESIGN", delim)){
-            data.full_design = to_int( delim );
+            data.full_design = to_double( delim );
           }
         }
       file.close();
@@ -76,16 +85,11 @@ void parseBattery( const std::string& path, BatteryData& data )
 void convertToMilliWattHour( BatteryData& data )
 {
   // From print_battery_info.c in i3status
-  data.present_rate = ((static_cast<double>(data.voltage) / 1000.0) *
-                       (static_cast<double>(data.present_rate) / 1000.0));
+  data.present_rate = (data.voltage / 1000.0) * (data.present_rate / 1000.0);
 
   if( data.voltage != -1) {
-
-    data.remaining = ((static_cast<double>(data.voltage) / 1000.0) *
-                      (static_cast<double>(data.remaining) / 1000.0));
-
-    data.full_design = ((static_cast<double>(data.voltage) / 1000.0) *
-                        (static_cast<double>(data.full_design) / 1000.0));
+    data.remaining = (data.voltage / 1000.0) * (data.remaining / 1000.0);
+    data.full_design = (data.voltage / 1000.0) * (data.full_design / 1000.0);
   }
 }
 
@@ -95,12 +99,9 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
   double remaining_time;
 
   if( data.status == ST_CHARGING) {
-    remaining_time = (static_cast<double>(data.full_design) -
-                      static_cast<double>(data.remaining)) /
-      static_cast<double>(data.present_rate);
+    remaining_time = (data.full_design - data.remaining) / data.present_rate;
   } else if ( data.status == ST_DISCHARGING ) {
-    remaining_time = static_cast<double>(data.remaining) /
-      static_cast<double>(data.present_rate);
+    remaining_time = data.remaining / data.present_rate;
   } else {
     remaining_time = 0.0;
   }
@@ -113,14 +114,6 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
   ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
 }
 
-typedef std::array<std::string,5> ArrayT;
-
-struct Parameters 
-{
-  std::string path = "/sys/class/power_supply/BAT0";
-  ArrayT icons = ArrayT{ "", "", "", "", "" };
-};
-
 bool parseArgs( const int argc, char* const* argv, Parameters& params )
 {
   struct option long_options[] =
@@ -130,6 +123,17 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
       {"help",  no_argument, 0, 'h'},
       {0, 0, 0, 0}
     };
+  static const std::string help_text = R"(
+Options:
+  -t, --type [TYPE]         Specify what icons to use to indicate 
+                            the battery status. Select between battery or
+                            heart.
+  -c, --custom [FULL,EMPTY] Use custom battery indicator, using a combination 
+                            of characters FULL and EMPTY. 
+  -h, --help                Print this message and then exit.
+Author:
+  Fredrik "PlaTFooT" Salomonsson
+)";
 
   int option_index = 0;
   int c;
@@ -170,17 +174,7 @@ bool parseArgs( const int argc, char* const* argv, Parameters& params )
       }
       break;
     case 'h':
-      std::cout<<"Usage: "<<argv[0]<<" [OPTIONS]...\n"
-               <<R"(Options:
-  -t, --type [TYPE]         Specify what icons to use to indicate 
-                            the battery status. Select between battery or
-                            heart.
-  -c, --custom [FULL,EMPTY] Use custom battery indicator, using a combination 
-                            of characters FULL and EMPTY.
-  -h, --help                Print this message and then exit.
-Author:
-  Fredrik "PlaTFooT" Salomonsson
-)";
+      std::cout<<"Usage: "<<argv[0]<<" [OPTIONS]..."<<help_text;
       return false;
       break;
     }
@@ -201,20 +195,18 @@ int main( int argc, char** argv )
   
   /* The difference between POWER_SUPPLY_ENERGY_NOW and
    * POWER_SUPPLY_CHARGE_NOW is the unit of measurement. The energy is
-   * given in mWh, the charge in mAh. So calculate every value given in
-   * ampere to watt */
+   * given in mWh, the charge in mAh. So calculate every value given
+   * in ampere to watt */
   if( !data.watt_as_unit )
     convertToMilliWattHour(data);
-  if( (data.full_design == -1) || (data.remaining == -1 ) ){
+  if( (data.full_design < 0.0) || (data.remaining < 0.0 ) ){
     std::cout<<"  "<<std::endl;
     return 1;
   }
   
-  const double percentage = static_cast<double>(data.remaining)/
-    static_cast<double>(data.full_design)*100.0;
+  const double percentage = data.remaining/ data.full_design * 100.0;
 
   std::stringstream ss;
-
   auto gen_battery_icon = [&ss,percentage](const std::array<std::string,5>& icons ){
     if( percentage >= 95.0 ) {
       ss<<icons[0];
@@ -244,7 +236,7 @@ int main( int argc, char** argv )
   }
 
   // Compute time of discharge/charge
-  if( data.present_rate > 0 ){
+  if( data.present_rate > 0.0 ){
     computeTime( data, ss );
   }
 
