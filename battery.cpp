@@ -14,19 +14,19 @@
 #include <dirent.h>
 
 enum Status : size_t {
-  ST_CHARGING = 0,
-  ST_PLUG = 1,
-  ST_DISCHARGING = 2
+  ST_DISCHARGING = 0,
+  ST_CHARGING = 1,
+  ST_PLUG = 2
 };
 
 std::string STATUS_ICONS[] = {
+  " ",
   "",
-  "",
-  " "
+  ""
 };
 
 struct BatteryData {
-  Status status = ST_DISCHARGING;
+  Status status = ST_PLUG;
   double full_design = -1.0;
   double remaining = -1.0;
   double present_rate= -1.0;
@@ -124,26 +124,7 @@ void convertTo_mWh( BatteryData& data )
   }
 }
 
-double computePercentage( const BatteryVectorT& batteries, 
-                          const Parameters& params)
-{
-  if( params.battery == -1 ){
-    // Compute the total percentage
-    double full_design = 0.0;
-    double remaining = 0.0;
-    for( const auto& data : batteries ){
-      full_design += data.full_design; 
-      remaining += data.remaining; 
-    }
-    return remaining / full_design * 100.0; 
-  } else {
-    const auto& data = batteries[params.battery];
-    return data.remaining / data.full_design * 100.0;
-  }
-}
-
-/// Computes the time, in seconds, until battery is depleted or fully charged.
-size_t secondsRemaining( const BatteryData& data )
+void computeTime( const BatteryData& data, std::stringstream& ss )
 {
   double remaining_time;
 
@@ -155,31 +136,12 @@ size_t secondsRemaining( const BatteryData& data )
     remaining_time = 0.0;
   }
     
-  return static_cast<size_t>( remaining_time * 3600.0 );
-}
+  const size_t seconds_remaining = static_cast<size_t>( remaining_time * 3600.0 );
 
-void computeTime( const BatteryVectorT& batteries,
-                  const Parameters& params,
-                  std::stringstream& ss )
-{
-  size_t seconds_remaining = 0;
-  if( params.battery == -1 ){
-    // Compute the total percentage
-    for( const auto& data : batteries ){
-      seconds_remaining += secondsRemaining( data );
-    }
-  } else {
-    seconds_remaining += secondsRemaining( batteries[params.battery] );
-  }
-
-  if(seconds_remaining > 0.0 ) {
-    const size_t hours = seconds_remaining / 3600;
-    const size_t seconds = seconds_remaining - (hours * 3600);
-    const size_t minutes = seconds / 60;
-    ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
-  } else {
-    ss<<"Full";
-  }
+  const size_t hours = seconds_remaining / 3600;
+  const size_t seconds = seconds_remaining - (hours * 3600);
+  const size_t minutes = seconds / 60;
+  ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
 }
 
 void batteryStatus( const BatteryVectorT& batteries,
@@ -194,7 +156,7 @@ void batteryStatus( const BatteryVectorT& batteries,
     }
     ss<<STATUS_ICONS[ status ];
   } else {
-    ss<<STATUS_ICONS[ batteries[params.battery].status ];
+    ;
   }
 }
 
@@ -273,6 +235,49 @@ Author:
   return true;
 }
 
+bool processButtons( const BatteryVectorT& batteries,
+                     const size_t num_batts,
+                     Parameters& params )
+{
+  std::string block_button;
+  {
+    char* block_buffer = getenv("BLOCK_BUTTON");
+    block_button = block_buffer != NULL ? block_buffer : "";
+  }
+  if( !block_button.empty() ){
+    // Handle button event
+    if( block_button == "1" )
+      return true;
+    else if( block_button == "3"){
+      // Find the first battery with energy remaining, starting from
+      // the back.
+      for( auto it = batteries.crbegin(), end = batteries.crend();
+           it != end; ++it ){
+        if( it->remaining > 0.0 ) {
+          params.battery = (end - it) - 1;
+          return false;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+BatteryData combineBatteries( const BatteryVectorT& batteries )
+{
+  BatteryData data;
+  data.remaining = 0.0;
+  data.full_design = 0.0;
+  for( const auto& battery : batteries ) {
+    data.status = std::min( data.status, battery.status );
+    data.remaining += battery.remaining;
+    data.full_design += battery.full_design;
+    data.present_rate = std::max( data.present_rate, battery.present_rate );
+    data.voltage = std::max( data.voltage, battery.voltage );
+  }
+  return data;
+}
+
 int main( int argc, char** argv )
 {
   const double threshold = 10.0;
@@ -282,7 +287,6 @@ int main( int argc, char** argv )
     return 0;
 
   const long int num_batts = countBatteries( params.path );
-
   // Make sure battery index is within bounds
   params.battery = std::min( params.battery, num_batts - 1 );
 
@@ -308,41 +312,44 @@ int main( int argc, char** argv )
     }
   }
 
-  const double percentage = computePercentage( batteries, params );
+  const bool button1_pressed = processButtons( batteries, num_batts, params );
+
+  const BatteryData& data = params.battery == -1 
+    ? combineBatteries( batteries ) 
+    : batteries[params.battery];
+ 
+  const double percentage = data.remaining / data.full_design * 100.0;
 
   std::stringstream ss;
-  auto gen_battery_icon = [&ss,percentage]( const ArrayT& icons ){
+
+  // Add battery status 
+  ss<<STATUS_ICONS[ data.status ];
+
+  if( button1_pressed ) {
+    ss<<static_cast<size_t>(percentage)<<"% ";
+  } else {
     ss<<" ";
     if( percentage >= 95.0 ) {
-      ss<<icons[0];
+      ss<<params.icons[0];
     } else if( percentage >= 75.0 ) {
-      ss<<icons[1];
+      ss<<params.icons[1];
     } else if( percentage >= 50.0 ) {
-      ss<<icons[2];
+      ss<<params.icons[2];
     } else if( percentage >= 25.0 ) {
-      ss<<icons[3];
+      ss<<params.icons[3];
     } else {
-      ss<<icons[4];
+      ss<<params.icons[4];
     }
     ss<<"  ";
-  };
-  
-  std::string block_button;
-  {
-    char* block_buffer = getenv("BLOCK_BUTTON");
-    block_button = block_buffer != NULL ? block_buffer : "";
-  }
-  
-  batteryStatus( batteries, params, ss );
-
-  if( block_button.empty() ) {
-    gen_battery_icon( params.icons );
-  } else {
-    ss<<static_cast<size_t>(percentage)<<"% ";
   }
   
   // Compute time of discharge/charge
-  computeTime( batteries, params, ss );
+  if( data.present_rate > 0.0 ) {
+    computeTime( data, ss );
+  } else {
+    ss<<"Full";
+  }
+
 
   // Output the format i3blocks want
   std::cout<<ss.str()<<std::endl;
