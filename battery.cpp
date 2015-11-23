@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <dirent.h>
 
-
 enum Status : size_t {
   ST_CHARGING = 0,
   ST_PLUG = 1,
@@ -22,8 +21,8 @@ enum Status : size_t {
 
 std::string STATUS_ICONS[] = {
   "",
-  " ",
-  ""
+  "",
+  " "
 };
 
 struct BatteryData {
@@ -179,7 +178,7 @@ void computeTime( const BatteryVectorT& batteries,
     const size_t minutes = seconds / 60;
     ss<<(hours<10?"0":"")<<hours<<":"<<(minutes<10?"0":"")<<minutes;
   } else {
-    return ;
+    ss<<"Full";
   }
 }
 
