@@ -287,7 +287,8 @@ size_t processButtons( const BatteryVectorT& batteries,
     // Handle button event
     if( block_button == "1" )
       return 1;
-    else {
+    // Button 2 and 3 only valid if combining all the batteries.
+    else if( params.battery == -1 ){
       const size_t button = strtoul( block_button.c_str(), NULL, 10 );
       // Find the first battery with energy remaining, starting from
       // the back.
