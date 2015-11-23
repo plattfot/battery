@@ -1,17 +1,19 @@
-EXEC := battery
+EXEC ?= battery
+PREFIX ?= ~/.i3/custom/
+CXX ?= g++
+
 ifeq ($(DEBUG),YES)
 type := -g
 else
 type := -O3
 endif
-CXX ?= g++
 
 $(EXEC): $(EXEC).cpp
 	$(CXX) -std=c++14 $(type) $< -o $@
 
 .PHONY: install
-install:
-	cp $(EXEC) ~/.i3/custom/
+install: $(EXEC)
+	cp $(EXEC) $(PREFIX)
 
 PHONY: clean
 clean:
