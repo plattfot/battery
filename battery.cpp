@@ -119,34 +119,47 @@ void parseBattery( const std::string& path, BatteryData& data )
         if( begins_with("POWER_SUPPLY_ENERGY_NOW",delim) ) {
           data.watt_as_unit = true;
           data.remaining = to_double(delim);
-        } else if( begins_with("POWER_SUPPLY_CHARGE_NOW", delim) ){
+        }
+        else if( begins_with("POWER_SUPPLY_CHARGE_NOW", delim) ) {
           data.watt_as_unit = false;
           data.remaining = to_double( delim );
-        } else if( begins_with( "POWER_SUPPLY_CURRENT_NOW", delim) )
+        }
+        else if( begins_with( "POWER_SUPPLY_CURRENT_NOW", delim) ) {
           data.present_rate = std::fabs( to_double( delim ) );
-        else if( begins_with( "POWER_SUPPLY_VOLTAGE_NOW", delim) )
+        }
+        else if( begins_with( "POWER_SUPPLY_VOLTAGE_NOW", delim) ) {
           data.voltage = std::fabs( to_double( delim ) );
-        
+        }        
         /* on some systems POWER_SUPPLY_POWER_NOW does not exist, but actually
          * it is the same as POWER_SUPPLY_CURRENT_NOW but with μWh as
          * unit instead of μAh. We will calculate it as we need it
          * later. */
-        else if (begins_with("POWER_SUPPLY_POWER_NOW", delim ))
+        else if (begins_with("POWER_SUPPLY_POWER_NOW", delim )) {
           data.present_rate = abs( to_double(delim) );
+        }
         else if (begins_with("POWER_SUPPLY_STATUS", delim )) {
+
           const std::string& status = line.substr(delim+1);
           if( status == "Charging" ) {
-            data.status = ST_CHARGING;
-          } else if( status == "Discharging" ) {
-            data.status = ST_DISCHARGING;
-          } else {
-            data.status = ST_PLUG;
+            data.status = Status::CHARGING;
           }
-        } else if (begins_with("POWER_SUPPLY_ENERGY_FULL_DESIGN", delim)){
-          data.full_design = to_double( delim );
-        } else if (begins_with("POWER_SUPPLY_ENERGY_FULL", delim)){
-          data.full = to_double( delim );
+          else if( status == "Discharging" ) {
+            data.status = Status::DISCHARGING;
+          }
+          else {
+            data.status = Status::PLUG;
+          }
+          
         }
+        else if( begins_with("POWER_SUPPLY_ENERGY_FULL_DESIGN", delim) ||
+                 begins_with("POWER_SUPPLY_CHARGE_FULL_DESIGN", delim) ) {
+          data.full_design = to_double( delim );
+        }
+        else if( begins_with("POWER_SUPPLY_ENERGY_FULL", delim) || 
+                 begins_with("POWER_SUPPLY_CHARGE_FULL", delim) ) {
+          data.full = to_double( delim );
+        } 
+
       }
       file.close();
     }
