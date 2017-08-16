@@ -25,15 +25,16 @@
 #include <vector>
 #include <memory>
 #include <regex>
+#include <type_traits>
 
 #include <getopt.h>
 #include <stdlib.h>
 #include <dirent.h>
 
-enum Status : size_t {
-  ST_DISCHARGING = 0,
-  ST_CHARGING = 1,
-  ST_PLUG = 2
+enum class Status : size_t {
+  DISCHARGING = 0,
+  CHARGING = 1,
+  PLUG = 2
 };
 
 static const std::string STATUS_ICONS[] = {
