@@ -1,5 +1,5 @@
 EXEC ?= battery
-PREFIX ?= ~/.i3/custom/
+PREFIX ?= ~/.config/i3/custom/
 CXX ?= g++
 
 ifeq ($(DEBUG),YES)
