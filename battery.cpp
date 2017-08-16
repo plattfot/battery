@@ -53,7 +53,7 @@ struct Parameters
 };
 
 struct BatteryData {
-  Status status = ST_PLUG;
+  Status status = Status::PLUG;
   double full_design = -1.0;
   double full = -1.0;
   double remaining = -1.0;
@@ -182,11 +182,13 @@ void computeTime( const BatteryData& data, std::stringstream& ss )
 {
   double remaining_time;
 
-  if( data.status == ST_CHARGING) {
+  if( data.status == Status::CHARGING) {
     remaining_time = (data.full - data.remaining) / data.present_rate;
-  } else if ( data.status == ST_DISCHARGING ) {
+  }
+  else if ( data.status == Status::DISCHARGING ) {
     remaining_time = data.remaining / data.present_rate;
-  } else {
+  }
+  else {
     remaining_time = 0.0;
   }
     
@@ -288,8 +290,8 @@ Author:
 }
 
 size_t processButtons( const BatteryVectorT& batteries,
-                     const size_t num_batts,
-                     Parameters& params )
+                       const size_t num_batts,
+                       Parameters& params )
 {
   std::string block_button;
   {
@@ -367,7 +369,7 @@ int main( int argc, char** argv )
     ss<<params.battery<<":";
     break;
   default:
-    ss<<STATUS_ICONS[ data.status ]<<" ";
+    ss<<STATUS_ICONS[ static_cast<std::underlying_type_t<Status>>(data.status) ]<<" ";
   }
   
   // Add battery status 
@@ -377,26 +379,31 @@ int main( int argc, char** argv )
     ss<<static_cast<size_t>(percentage)<<"% ";
     break;
   default:
-      {
-        if( percentage >= 95.0 ) {
-          ss<<params.icons[0];
-        } else if( percentage >= 75.0 ) {
-          ss<<params.icons[1];
-        } else if( percentage >= 50.0 ) {
-          ss<<params.icons[2];
-        } else if( percentage >= 25.0 ) {
-          ss<<params.icons[3];
-        } else {
-          ss<<params.icons[4];
-        }
-        ss<<" ";
+    {
+      if( percentage >= 95.0 ) {
+        ss<<params.icons[0];
       }
+      else if( percentage >= 75.0 ) {
+        ss<<params.icons[1];
+      }
+      else if( percentage >= 50.0 ) {
+        ss<<params.icons[2];
+      }
+      else if( percentage >= 25.0 ) {
+        ss<<params.icons[3];
+      }
+      else {
+        ss<<params.icons[4];
+      }
+      ss<<" ";
+    }
   }
   
   // Compute time of discharge/charge
   if( data.present_rate > 0.0 ) {
     computeTime( data, ss );
-  } else {
+  }
+  else {
     ss<<"Full";
   }
 
