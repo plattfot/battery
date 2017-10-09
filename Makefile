@@ -11,8 +11,11 @@ endif
 $(EXEC): $(EXEC).cpp
 	$(CXX) -std=c++14 $(type) $< -o $@
 
+$(PREFIX): 
+	mkdir -p $@
+
 .PHONY: install
-install: $(EXEC)
+install: $(EXEC) | $(PREFIX)
 	cp $(EXEC) $(PREFIX)
 
 PHONY: clean
